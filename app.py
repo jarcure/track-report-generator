@@ -133,6 +133,12 @@ st.divider()
 
 # ---------- CSV upload and processing ----------
 st.subheader("3. Upload CSV export")
+col_g, col_h = st.columns(2)
+with col_g:
+    filename_prefix = st.text_input("File name prefix (optional)", value="", placeholder="e.g. StaffordRd_")
+with col_h:
+    zip_name = st.text_input("Zip file name", value="track_reports")
+
 csv_file = st.file_uploader("CSV file from the field device", type="csv", key="data_csv")
 
 def load_rounds(file):
@@ -191,7 +197,7 @@ def harden_static_values(ws, decimal_places=2):
             for col in data_cols:
                 ws[f"{col}{row}"].number_format = num_format
 
-def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places=2):
+def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places=2, filename_prefix=""):
     with open(TEMPLATE_PATH, "rb") as f:
         wb = openpyxl.load_workbook(f)
     ws = wb["Sheet1"]
@@ -271,7 +277,7 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = dt.strftime("%m-%d-%y_%I%M%p").lstrip("0").lower() + ".xlsx"
+    fname = filename_prefix + dt.strftime("%m-%d-%y_%I%M%p").lstrip("0").lower() + ".xlsx"
     return fname, buf, matched, unmatched, date_str, time_str, missing_points
 
 import re
@@ -320,7 +326,7 @@ if csv_file is not None:
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for i, (ts, rows) in enumerate(items):
                 fname, filebuf, matched, unmatched, date_str, time_str, missing_points = fill_template(
-                    rows, mapping_lookup, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places
+                    rows, mapping_lookup, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places, filename_prefix
                 )
                 zf.writestr(fname, filebuf.read())
                 total_matched += matched
@@ -374,7 +380,7 @@ if csv_file is not None:
         st.download_button(
             "Download all reports (.zip)",
             zip_buf,
-            file_name="track_reports.zip",
+            file_name=f"{zip_name or 'track_reports'}.zip",
             mime="application/zip",
         )
 else:
