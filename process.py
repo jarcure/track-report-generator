@@ -158,9 +158,12 @@ def fill_template(template_path, out_path, rows, mapping, ls_file="25146",
             unmatched.append(name)
             continue
         sheet = cfg.get("Sheet", "Sheet1")
-        safe_write(wb, sheet, cfg["Cell_DN"], float(row["StdDevNorthing"]))
-        safe_write(wb, sheet, cfg["Cell_DE"], float(row["StdDevEasting"]))
-        safe_write(wb, sheet, cfg["Cell_DELV"], float(row["StdDevElevation"]))
+        delta_n = float(row["ReferenceNorthing"]) - float(row["Northing"])
+        delta_e = float(row["ReferenceEasting"]) - float(row["Easting"])
+        delta_v = float(row["ReferenceElevation"]) - float(row["Elevation"])
+        safe_write(wb, sheet, cfg["Cell_DN"], delta_n)
+        safe_write(wb, sheet, cfg["Cell_DE"], delta_e)
+        safe_write(wb, sheet, cfg["Cell_DELV"], delta_v)
         matched.append(name)
 
     # Any TMP slot in the mapping that had no matching row this round gets NULL,
