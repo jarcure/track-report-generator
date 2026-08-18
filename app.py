@@ -91,11 +91,13 @@ with col_b:
 with col_c:
     contractor_name = st.text_input("Contractor", value="MONTANA CONSTRUCTION")
 
-col_d, col_e = st.columns(2)
+col_d, col_e, col_f = st.columns(3)
 with col_d:
     cert_number = st.text_input("Cert. of Auth. #", value="24GA2872300")
 with col_e:
     rev_number = st.text_input("REV", value="0")
+with col_f:
+    decimal_places = st.number_input("Decimal places shown", min_value=0, max_value=7, value=2, step=1)
 
 st.divider()
 
@@ -165,10 +167,12 @@ TRACKS_INFO = [
 ]
 ROWS_PER_TRACK = 19
 
-def harden_static_values(ws):
+def harden_static_values(ws, decimal_places=2):
     """Writes real numbers for TMP and Cross Level instead of relying on Excel
     formulas, so the file displays correctly even if the viewer never
     recalculates (manual calc mode, some online previewers, etc.)."""
+    num_format = "0." + "0" * decimal_places if decimal_places > 0 else "0"
+    data_cols = ["C", "D", "E", "G", "H", "I", "J"]
     for t in TRACKS_INFO:
         for i in range(ROWS_PER_TRACK):
             row = t["header_row"] + i
@@ -184,7 +188,10 @@ def harden_static_values(ws):
             else:
                 ws[f"J{row}"] = "NULL"
 
-def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_number, rev_number):
+            for col in data_cols:
+                ws[f"{col}{row}"].number_format = num_format
+
+def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places=2):
     with open(TEMPLATE_PATH, "rb") as f:
         wb = openpyxl.load_workbook(f)
     ws = wb["Sheet1"]
@@ -239,7 +246,17 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
             safe_write(wb, sheet, cfg["Cell_DELV"], "NULL", NULL_FILL)
             missing_points.append(name)
 
-    harden_static_values(ws)
+    harden_static_values(ws, decimal_places)
+
+    # Apply the same decimal format to any RMP-style cells the mapping points to
+    num_format = "0." + "0" * decimal_places if decimal_places > 0 else "0"
+    for name, cfg in mapping.items():
+        sheet = cfg.get("Sheet", "Sheet1")
+        if sheet != "Sheet1" and sheet in wb.sheetnames:
+            ws_other = wb[sheet]
+            for cell_ref in (cfg["Cell_DN"], cfg["Cell_DE"], cfg["Cell_DELV"]):
+                if isinstance(cell_ref, str) and CELL_PATTERN.match(cell_ref.strip()):
+                    ws_other[cell_ref.strip()].number_format = num_format
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -293,7 +310,7 @@ if csv_file is not None:
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for i, (ts, rows) in enumerate(items):
                 fname, filebuf, matched, unmatched, date_str, time_str, missing_points = fill_template(
-                    rows, mapping_lookup, ls_file, project_name, contractor_name, cert_number, rev_number
+                    rows, mapping_lookup, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places
                 )
                 zf.writestr(fname, filebuf.read())
                 total_matched += matched
