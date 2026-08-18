@@ -216,6 +216,16 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
     for cell_ref in REV_CELLS:
         ws[cell_ref] = f"REV {rev_number}"
 
+    if "RMP" in wb.sheetnames:
+        ws_rmp = wb["RMP"]
+        ws_rmp["I3"] = ls_file
+        ws_rmp["I4"] = date_str
+        ws_rmp["I5"] = time_str
+        ws_rmp["H7"] = f"Cert. of Auth. #{cert_number}"
+        ws_rmp["D9"] = project_name
+        ws_rmp["D10"] = contractor_name
+        ws_rmp["I10"] = f"REV {rev_number}"
+
     matched, unmatched = 0, 0
     for row in rows:
         name = row["Point Name"]
