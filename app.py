@@ -190,9 +190,12 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
             unmatched += 1
             continue
         sheet = cfg.get("Sheet", "Sheet1")
-        ok = (safe_write(wb, sheet, cfg["Cell_DN"], float(row["StdDevNorthing"]))
-              and safe_write(wb, sheet, cfg["Cell_DE"], float(row["StdDevEasting"]))
-              and safe_write(wb, sheet, cfg["Cell_DELV"], float(row["StdDevElevation"])))
+        delta_n = float(row["ReferenceNorthing"]) - float(row["Northing"])
+        delta_e = float(row["ReferenceEasting"]) - float(row["Easting"])
+        delta_v = float(row["ReferenceElevation"]) - float(row["Elevation"])
+        ok = (safe_write(wb, sheet, cfg["Cell_DN"], delta_n)
+              and safe_write(wb, sheet, cfg["Cell_DE"], delta_e)
+              and safe_write(wb, sheet, cfg["Cell_DELV"], delta_v))
         if ok:
             matched += 1
         else:
