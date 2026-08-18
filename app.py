@@ -157,6 +157,33 @@ def safe_write(wb, sheet_name, cell_ref, value, fill=None):
         ws[cell_ref.strip()].fill = fill
     return True
 
+TRACKS_INFO = [
+    {"header_row": 15, "tmp_start": 100},
+    {"header_row": 58, "tmp_start": 200},
+    {"header_row": 101, "tmp_start": 300},
+    {"header_row": 144, "tmp_start": 400},
+]
+ROWS_PER_TRACK = 19
+
+def harden_static_values(ws):
+    """Writes real numbers for TMP and Cross Level instead of relying on Excel
+    formulas, so the file displays correctly even if the viewer never
+    recalculates (manual calc mode, some online previewers, etc.)."""
+    for t in TRACKS_INFO:
+        for i in range(ROWS_PER_TRACK):
+            row = t["header_row"] + i
+            tmp_right = t["tmp_start"] + i * 2
+            tmp_left = tmp_right + 1
+            ws[f"B{row}"] = tmp_right
+            ws[f"F{row}"] = tmp_left
+
+            e_val = ws[f"E{row}"].value
+            i_val = ws[f"I{row}"].value
+            if isinstance(e_val, (int, float)) and isinstance(i_val, (int, float)):
+                ws[f"J{row}"] = round(e_val - i_val, 7)
+            else:
+                ws[f"J{row}"] = "NULL"
+
 def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_number, rev_number):
     with open(TEMPLATE_PATH, "rb") as f:
         wb = openpyxl.load_workbook(f)
@@ -211,6 +238,8 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
             safe_write(wb, sheet, cfg["Cell_DE"], "NULL", NULL_FILL)
             safe_write(wb, sheet, cfg["Cell_DELV"], "NULL", NULL_FILL)
             missing_points.append(name)
+
+    harden_static_values(ws)
 
     buf = io.BytesIO()
     wb.save(buf)
