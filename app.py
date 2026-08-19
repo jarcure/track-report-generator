@@ -91,11 +91,13 @@ with col_b:
 with col_c:
     contractor_name = st.text_input("Contractor", value="MONTANA CONSTRUCTION")
 
-col_d, col_e = st.columns(2)
+col_d, col_e, col_f = st.columns(3)
 with col_d:
     cert_number = st.text_input("Cert. of Auth. #", value="24GA2872300")
 with col_e:
     rev_number = st.text_input("REV", value="0")
+with col_f:
+    decimal_places = st.number_input("Decimal places shown", min_value=0, max_value=7, value=2, step=1)
 
 st.divider()
 
@@ -131,6 +133,12 @@ st.divider()
 
 # ---------- CSV upload and processing ----------
 st.subheader("3. Upload CSV export")
+col_g, col_h = st.columns(2)
+with col_g:
+    filename_prefix = st.text_input("File name prefix (optional)", value="", placeholder="e.g. StaffordRd_")
+with col_h:
+    zip_name = st.text_input("Zip file name", value="track_reports")
+
 csv_file = st.file_uploader("CSV file from the field device", type="csv", key="data_csv")
 
 def load_rounds(file):
@@ -157,7 +165,39 @@ def safe_write(wb, sheet_name, cell_ref, value, fill=None):
         ws[cell_ref.strip()].fill = fill
     return True
 
-def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_number, rev_number):
+TRACKS_INFO = [
+    {"header_row": 15, "tmp_start": 100},
+    {"header_row": 58, "tmp_start": 200},
+    {"header_row": 101, "tmp_start": 300},
+    {"header_row": 144, "tmp_start": 400},
+]
+ROWS_PER_TRACK = 19
+
+def harden_static_values(ws, decimal_places=2):
+    """Writes real numbers for TMP and Cross Level instead of relying on Excel
+    formulas, so the file displays correctly even if the viewer never
+    recalculates (manual calc mode, some online previewers, etc.)."""
+    num_format = "0." + "0" * decimal_places if decimal_places > 0 else "0"
+    data_cols = ["C", "D", "E", "G", "H", "I", "J"]
+    for t in TRACKS_INFO:
+        for i in range(ROWS_PER_TRACK):
+            row = t["header_row"] + i
+            tmp_right = t["tmp_start"] + i * 2
+            tmp_left = tmp_right + 1
+            ws[f"B{row}"] = tmp_right
+            ws[f"F{row}"] = tmp_left
+
+            e_val = ws[f"E{row}"].value
+            i_val = ws[f"I{row}"].value
+            if isinstance(e_val, (int, float)) and isinstance(i_val, (int, float)):
+                ws[f"J{row}"] = round(e_val - i_val, 7)
+            else:
+                ws[f"J{row}"] = "NULL"
+
+            for col in data_cols:
+                ws[f"{col}{row}"].number_format = num_format
+
+def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places=2, filename_prefix=""):
     with open(TEMPLATE_PATH, "rb") as f:
         wb = openpyxl.load_workbook(f)
     ws = wb["Sheet1"]
@@ -182,6 +222,16 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
     for cell_ref in REV_CELLS:
         ws[cell_ref] = f"REV {rev_number}"
 
+    if "RMP" in wb.sheetnames:
+        ws_rmp = wb["RMP"]
+        ws_rmp["I3"] = ls_file
+        ws_rmp["I4"] = date_str
+        ws_rmp["I5"] = time_str
+        ws_rmp["H7"] = f"Cert. of Auth. #{cert_number}"
+        ws_rmp["D9"] = project_name
+        ws_rmp["D10"] = contractor_name
+        ws_rmp["I10"] = f"REV {rev_number}"
+
     matched, unmatched = 0, 0
     for row in rows:
         name = row["Point Name"]
@@ -190,9 +240,12 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
             unmatched += 1
             continue
         sheet = cfg.get("Sheet", "Sheet1")
-        ok = (safe_write(wb, sheet, cfg["Cell_DN"], float(row["StdDevNorthing"]))
-              and safe_write(wb, sheet, cfg["Cell_DE"], float(row["StdDevEasting"]))
-              and safe_write(wb, sheet, cfg["Cell_DELV"], float(row["StdDevElevation"])))
+        delta_n = float(row["ReferenceNorthing"]) - float(row["Northing"])
+        delta_e = float(row["ReferenceEasting"]) - float(row["Easting"])
+        delta_v = float(row["ReferenceElevation"]) - float(row["Elevation"])
+        ok = (safe_write(wb, sheet, cfg["Cell_DN"], delta_n)
+              and safe_write(wb, sheet, cfg["Cell_DE"], delta_e)
+              and safe_write(wb, sheet, cfg["Cell_DELV"], delta_v))
         if ok:
             matched += 1
         else:
@@ -209,10 +262,22 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
             safe_write(wb, sheet, cfg["Cell_DELV"], "NULL", NULL_FILL)
             missing_points.append(name)
 
+    harden_static_values(ws, decimal_places)
+
+    # Apply the same decimal format to any RMP-style cells the mapping points to
+    num_format = "0." + "0" * decimal_places if decimal_places > 0 else "0"
+    for name, cfg in mapping.items():
+        sheet = cfg.get("Sheet", "Sheet1")
+        if sheet != "Sheet1" and sheet in wb.sheetnames:
+            ws_other = wb[sheet]
+            for cell_ref in (cfg["Cell_DN"], cfg["Cell_DE"], cfg["Cell_DELV"]):
+                if isinstance(cell_ref, str) and CELL_PATTERN.match(cell_ref.strip()):
+                    ws_other[cell_ref.strip()].number_format = num_format
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = dt.strftime("%m-%d-%y_%I%M%p").lstrip("0").lower() + ".xlsx"
+    fname = filename_prefix + dt.strftime("%m-%d-%y_%I%M%p").lstrip("0").lower() + ".xlsx"
     return fname, buf, matched, unmatched, date_str, time_str, missing_points
 
 import re
@@ -261,7 +326,7 @@ if csv_file is not None:
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for i, (ts, rows) in enumerate(items):
                 fname, filebuf, matched, unmatched, date_str, time_str, missing_points = fill_template(
-                    rows, mapping_lookup, ls_file, project_name, contractor_name, cert_number, rev_number
+                    rows, mapping_lookup, ls_file, project_name, contractor_name, cert_number, rev_number, decimal_places, filename_prefix
                 )
                 zf.writestr(fname, filebuf.read())
                 total_matched += matched
@@ -315,7 +380,7 @@ if csv_file is not None:
         st.download_button(
             "Download all reports (.zip)",
             zip_buf,
-            file_name="track_reports.zip",
+            file_name=f"{zip_name or 'track_reports'}.zip",
             mime="application/zip",
         )
 else:
