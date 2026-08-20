@@ -234,7 +234,7 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
 
     matched, unmatched = 0, 0
     for row in rows:
-        name = row["Point Name"]
+        name = normalize_name(row["Point Name"])
         cfg = mapping.get(name)
         if not cfg:
             unmatched += 1
@@ -252,7 +252,7 @@ def fill_template(rows, mapping, ls_file, project_name, contractor_name, cert_nu
             unmatched += 1
 
     # Any mapped point with no data this round gets NULL, highlighted yellow
-    found_names = {row["Point Name"] for row in rows}
+    found_names = {normalize_name(row["Point Name"]) for row in rows}
     missing_points = []
     for name, cfg in mapping.items():
         if name not in found_names:
@@ -284,6 +284,16 @@ import re
 
 CELL_PATTERN = re.compile(r"^[A-Z]+[0-9]+$")
 
+def normalize_name(name):
+    """Treats TMP-400 and TMP-400A as the same point, so a naming change on
+    the field device doesn't require touching the mapping table. Only strips
+    a trailing 'A' when it directly follows a digit, so it never affects
+    names like RMP-A or AMT-2."""
+    name = str(name).strip()
+    if len(name) > 1 and name[-1] == "A" and name[-2].isdigit():
+        return name[:-1]
+    return name
+
 def validate_mapping(mapping_df):
     """Returns (clean_lookup_dict, list_of_problem_rows)."""
     clean = {}
@@ -298,7 +308,7 @@ def validate_mapping(mapping_df):
             problems.append(name)
             continue
         row["Cell_DN"], row["Cell_DE"], row["Cell_DELV"] = [str(c).strip() for c in cells]
-        clean[name] = row
+        clean[normalize_name(name)] = row
     return clean, problems
 
 if csv_file is not None:
