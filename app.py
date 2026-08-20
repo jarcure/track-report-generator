@@ -103,7 +103,7 @@ st.divider()
 
 # ---------- Mapping table (editable in-browser) ----------
 if "mapping_df" not in st.session_state:
-    st.session_state.mapping_df = pd.read_csv(DEFAULT_MAPPING_PATH)
+    st.session_state.mapping_df = pd.read_csv(DEFAULT_MAPPING_PATH).sort_values("TMP", kind="stable").reset_index(drop=True)
 
 st.subheader("2. Point mapping")
 st.write("Add, remove, or edit rows below. Each Point Name needs a TMP number and the exact cells to write into.")
@@ -126,7 +126,7 @@ with col1:
 with col2:
     uploaded_mapping = st.file_uploader("Or upload a saved mapping CSV", type="csv", key="mapping_upload")
     if uploaded_mapping:
-        st.session_state.mapping_df = pd.read_csv(uploaded_mapping)
+        st.session_state.mapping_df = pd.read_csv(uploaded_mapping).sort_values("TMP", kind="stable").reset_index(drop=True)
         st.rerun()
 
 st.divider()
