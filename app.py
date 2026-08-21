@@ -343,7 +343,7 @@ if csv_file is not None:
                 total_unmatched += unmatched
                 summary_rows.append({
                     "Date": date_str, "Time": time_str,
-                    "Points Found": matched, "Points Missing": unmatched,
+                    "Points Found": matched, "Points Missing": len(missing_points),
                     "Missing Point Names": ", ".join(missing_points),
                     "Filename": fname,
                 })
